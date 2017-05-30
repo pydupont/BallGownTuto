@@ -22,19 +22,18 @@ knitr::opts_knit$set(root.dir = "RNAseq_protocol")
 ## Introduction
 
 This is a test of the new tuxedo pipeline as described in [_Transcript-level expression analysis of RNA-seq 
-experiments with HISAT, StringTie and Ballgown_](https://www.nature.com/nprot/journal/v11/n9/pdf/nprot.2016.095.pdf) (Pertea et al., Nature Protocol, Aug. 2016). The data for this can be downloaded from: [this site](ftp://ftp.ccb.jhu.edu//pub/RNAseq_protocol). In the new tuxedo pipeline, the mapper bowtie2 and tophat is replace by HiSAT. StringTie is then used to merge the files from HiSAT and computer the coverage per gene (previously done with cufflinks). Finally BallGown computes the differentially expressed genes (as cufflinks used to).
+experiments with HISAT, StringTie and Ballgown_](https://www.nature.com/nprot/journal/v11/n9/pdf/nprot.2016.095.pdf) (Pertea et al., Nature Protocol, Aug. 2016). The data for this can be downloaded from: [this site](ftp://ftp.ccb.jhu.edu//pub/RNAseq_protocol). In the new _tuxedo_ pipeline, the mapper _bowtie2_ is replaced by _HiSAT2_. _StringTie_ is then used to merge the files from _HiSAT2_ and computer the coverage per gene (previously done with _cufflinks_). Finally _BallGown_ computes the differentially expressed genes (as _cufflinks_ used to).
 
 
-## HiSAT
+## HiSAT2
 
-HiSAT is a spliced (or gapped) mapper. It is used for RNAseq mapping as the gene sequences may contain introns converted into gaps while aligning.a
-HiSAT works on indexed reference files. To build this index, use:
+_HiSAT2_ is a spliced (or gapped) mapper. It is used for RNAseq mapping as the gene sequences may contain introns converted into gaps while aligning the RNAseq reads. HiSAT works on indexed reference files. To build this index, use:
 
 ```{sh hisat_index, eval=FALSE}
 hisat2-build reference output_dir
 ```
 
-Many reference files can be used. They must be separated by commas on the command line. The indexes have already been built in the downloaded dataset. It is possible to provide the splicing sites (_ss_) and exons in the command line. They can be extracted from a gtf file giving information about genes and exons boundaries using tools provided with HiSAT.
+Many reference files can be used. They must be separated by commas on the command line. The indexes have already been built in the downloaded dataset. It is possible to provide the splicing sites (_ss_) and exons in the command line. They can be extracted from a _gtf_ file giving information about genes and exons boundaries using tools provided with _HiSAT2_.
 
 ```{sh hista_index2, eval=FALSE}
 extract_splice_sites.py chrX_data/genes/chrX.gtf > chrX.ss
@@ -181,7 +180,7 @@ It is also recommended to install the following libraries:
 * _dplyr_
 * _devtools_
 
-```{R ballgownlibs, eval=FALSE}
+```{R ballgownlibs, eval=FALSE, message=FALSE}
 install.packages(c("dplyr","devtools"))
 devtools::install_github('alyssafrazee/RSkittleBrewer')
 
@@ -225,7 +224,7 @@ To compute the FPKM, use the _ballgown_ command.
 bg_chrX <- ballgown(dataDir = "ballgown", samplePattern = "ERR", pData=pheno_data)
 ```
 
-The _dataDir_ parameter indicates to _ballgown_ where is the directory containing the previously processed data. The parameter _samplePattern_ indicates that the sample names start by "ERR". Finally the parameter _pData_ correspond to the dataframe containing the sample information. The structure of the _ballgown_ object is explained [here](https://github.com/alyssafrazee/ballgown#accessing-assembly-data). The expression values can be accessed using:
+The _dataDir_ parameter indicates to _ballgown_ where is the directory containing the previously processed data. The parameter _samplePattern_ indicates that the sample names start by "ERR". Finally the parameter _pData_ correspond to the data frame containing the sample information. The structure of the _ballgown_ object is explained [here](https://github.com/alyssafrazee/ballgown#accessing-assembly-data). The expression values can be accessed using:
 
 ```{r BGexpr}
 bg_chrX.expr <- expr(bg_chrX)
@@ -250,7 +249,7 @@ Here are the first five rows of the returned object.
 knitr::kable(results_transcripts[1:5,])
 ```
 
-Here,  we will look for transcripts that are differentially expressed between sexes, while correcting for any differences in expression due to the population variable. _getFC_ is set to TRUE so the Fold Change is also returned. It might not be correct to use this _stattest_ method on small replicate numbers, and we may need to go to DESeq.
+Here,  we will look for transcripts that are differentially expressed between sexes, while correcting for any differences in expression due to the population variable. _getFC_ is set to TRUE so the Fold Change is also returned. It might not be correct to use this _stattest_ method on small replicate numbers, and we may need to go to DESeq2.
 
 ###Differentially expressed genes
 
@@ -268,7 +267,7 @@ knitr::kable(results_genes[1:5,])
 
 ###Data post processing
 
-First, we need to add the gene informations to the transcript_results dataframe
+First, we need to add the gene information to the transcript_results data frame
 
 ```{r}
 results_transcripts <- data.frame(geneNames=ballgown::geneNames(bg_chrX_filt), geneIDs=ballgown::geneIDs(bg_chrX_filt), results_transcripts)
@@ -306,7 +305,7 @@ Here are the first five rows of the genes results.
 knitr::kable(results_genes[1:5,])
 ```
 
-Finally, in order to keep only the statitically significant genes, it is possible to filter the data using a Q-Value threshold of 0.05.
+Finally, in order to keep only the statistically significant genes, it is possible to filter the data using a Q-Value threshold of 0.05.
 
 ```{r qvaluefilter, message=FALSE, eval=FALSE}
 subset(results_transcripts,results_transcripts$qval<0.05)
@@ -390,7 +389,7 @@ Export to CSV
 write.csv(gene_expression, "chrX_gene_expression_results.csv", row.names=FALSE)
 ```
 
-Export all infos in one spreadsheet
+Export all information in one spreadsheet
 
 ```{R, message=FALSE}
 write.csv(merge(results_genes, gene_expression, by=0, all=T), "chrX_all_results.csv", row.names=TRUE)
