@@ -1,0 +1,488 @@
+---
+title: "RNASeq"
+author: "Pierre-Yves Dupont"
+output:
+  html_document:
+    highlight: tango
+    theme: cosmo
+    toc: yes
+  pdf_document:
+    highlight: tango
+    keep_tex: yes
+    latex_engine: lualatex
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = "RNAseq_protocol")
+```
+
+
+## Introduction
+
+This is a test of the new tuxedo pipeline as described in [_Transcript-level expression analysis of RNA-seq 
+experiments with HISAT, StringTie and Ballgown_](https://www.nature.com/nprot/journal/v11/n9/pdf/nprot.2016.095.pdf) (Pertea et al., Nature Protocol, Aug. 2016). The data for this can be downloaded from: [this site](ftp://ftp.ccb.jhu.edu//pub/RNAseq_protocol). In the new tuxedo pipeline, the mapper bowtie2 and tophat is replace by HiSAT. StringTie is then used to merge the files from HiSAT and computer the coverage per gene (previously done with cufflinks). Finally BallGown computes the differentially expressed genes (as cufflinks used to).
+
+
+## HiSAT
+
+HiSAT is a spliced (or gapped) mapper. It is used for RNAseq mapping as the gene sequences may contain introns converted into gaps while aligning.a
+HiSAT works on indexed reference files. To build this index, use:
+
+```{sh hisat_index, eval=FALSE}
+hisat2-build reference output_dir
+```
+
+Many reference files can be used. They must be separated by commas on the command line. The indexes have already been built in the downloaded dataset. It is possible to provide the splicing sites (_ss_) and exons in the command line. They can be extracted from a gtf file giving information about genes and exons boundaries using tools provided with HiSAT.
+
+```{sh hista_index2, eval=FALSE}
+extract_splice_sites.py chrX_data/genes/chrX.gtf > chrX.ss
+extract_exons.py chrX_data/genes/chrX.gtf > chrX.exon
+
+hisat2-build --ss chrX.ss --exon chrX.exon chrX_data/genome/chrX.fa chrX_tran
+```
+
+Both _--ss_ and _--exon_ are optional arguments. This _hisat2-build_ command took about 6min on the example dataset.
+
+Here are all the HiSAT commands to map the reads from the 12 samples onto the indexed reference:
+
+```{sh hisat_mapping, eval=FALSE}
+hisat2 -p 2 --dta -x chrX_data/indexes/chrX_tran -1 chrX_data/samples/ERR188044_chrX_1.fastq.gz -2 chrX_data/samples/ERR188044_chrX_2.fastq.gz -S ERR188044_chrX.sam --time
+hisat2 -p 2 --dta -x chrX_data/indexes/chrX_tran -1 chrX_data/samples/ERR188104_chrX_1.fastq.gz -2 chrX_data/samples/ERR188104_chrX_2.fastq.gz -S ERR188104_chrX.sam --time
+hisat2 -p 2 --dta -x chrX_data/indexes/chrX_tran -1 chrX_data/samples/ERR188234_chrX_1.fastq.gz -2 chrX_data/samples/ERR188234_chrX_2.fastq.gz -S ERR188234_chrX.sam --time
+hisat2 -p 2 --dta -x chrX_data/indexes/chrX_tran -1 chrX_data/samples/ERR188245_chrX_1.fastq.gz -2 chrX_data/samples/ERR188245_chrX_2.fastq.gz -S ERR188245_chrX.sam --time
+hisat2 -p 2 --dta -x chrX_data/indexes/chrX_tran -1 chrX_data/samples/ERR188257_chrX_1.fastq.gz -2 chrX_data/samples/ERR188257_chrX_2.fastq.gz -S ERR188257_chrX.sam --time
+hisat2 -p 2 --dta -x chrX_data/indexes/chrX_tran -1 chrX_data/samples/ERR188273_chrX_1.fastq.gz -2 chrX_data/samples/ERR188273_chrX_2.fastq.gz -S ERR188273_chrX.sam --time
+hisat2 -p 2 --dta -x chrX_data/indexes/chrX_tran -1 chrX_data/samples/ERR188337_chrX_1.fastq.gz -2 chrX_data/samples/ERR188337_chrX_2.fastq.gz -S ERR188337_chrX.sam --time
+hisat2 -p 2 --dta -x chrX_data/indexes/chrX_tran -1 chrX_data/samples/ERR188383_chrX_1.fastq.gz -2 chrX_data/samples/ERR188383_chrX_2.fastq.gz -S ERR188383_chrX.sam --time
+hisat2 -p 2 --dta -x chrX_data/indexes/chrX_tran -1 chrX_data/samples/ERR188401_chrX_1.fastq.gz -2 chrX_data/samples/ERR188401_chrX_2.fastq.gz -S ERR188401_chrX.sam --time
+hisat2 -p 2 --dta -x chrX_data/indexes/chrX_tran -1 chrX_data/samples/ERR188428_chrX_1.fastq.gz -2 chrX_data/samples/ERR188428_chrX_2.fastq.gz -S ERR188428_chrX.sam --time
+hisat2 -p 2 --dta -x chrX_data/indexes/chrX_tran -1 chrX_data/samples/ERR188454_chrX_1.fastq.gz -2 chrX_data/samples/ERR188454_chrX_2.fastq.gz -S ERR188454_chrX.sam --time
+hisat2 -p 2 --dta -x chrX_data/indexes/chrX_tran -1 chrX_data/samples/ERR204916_chrX_1.fastq.gz -2 chrX_data/samples/ERR204916_chrX_2.fastq.gz -S ERR204916_chrX.sam --time
+```
+
+The mapping is fairly fast. Each command takes less than a minute. The generated files need then to be sorted and converted to smaller _bam_ files. This is done using _smatools_.
+
+```{sh sam2bam, eval=FALSE}
+samtools sort -@ 2 -o ERR188044_chrX.bam ERR188044_chrX.sam
+samtools sort -@ 2 -o ERR188104_chrX.bam ERR188104_chrX.sam
+samtools sort -@ 2 -o ERR188234_chrX.bam ERR188234_chrX.sam
+samtools sort -@ 2 -o ERR188245_chrX.bam ERR188245_chrX.sam
+samtools sort -@ 2 -o ERR188257_chrX.bam ERR188257_chrX.sam
+samtools sort -@ 2 -o ERR188273_chrX.bam ERR188273_chrX.sam
+samtools sort -@ 2 -o ERR188337_chrX.bam ERR188337_chrX.sam
+samtools sort -@ 2 -o ERR188383_chrX.bam ERR188383_chrX.sam
+samtools sort -@ 2 -o ERR188401_chrX.bam ERR188401_chrX.sam
+samtools sort -@ 2 -o ERR188428_chrX.bam ERR188428_chrX.sam
+samtools sort -@ 2 -o ERR188454_chrX.bam ERR188454_chrX.sam
+samtools sort -@ 2 -o ERR204916_chrX.bam ERR204916_chrX.sam
+```
+
+This will generate 12 _bam_ files (binary _sam_ files) which are compressed, and here sorted, versions of the original _sam_ files. The _sam_ files can be removed
+
+```{sh delsam, eval=FALSE}
+rm -f ERR*_chrX.sam
+```
+
+##StringTie
+
+_StringTie_ assembles RNAseq alignments from HiSat into potential transcripts. It can use a _gtf_ file as a guide for the assembly.
+
+```{sh stringtie, eval=FALSE}
+stringtie -p 2 -G chrX_data/genes/chrX.gtf -o ERR188044_chrX.gtf -l ERR188044 ERR188044_chrX.bam
+stringtie -p 2 -G chrX_data/genes/chrX.gtf -o ERR188104_chrX.gtf -l ERR188104 ERR188104_chrX.bam
+stringtie -p 2 -G chrX_data/genes/chrX.gtf -o ERR188234_chrX.gtf -l ERR188234 ERR188234_chrX.bam
+stringtie -p 2 -G chrX_data/genes/chrX.gtf -o ERR188245_chrX.gtf -l ERR188245 ERR188245_chrX.bam
+stringtie -p 2 -G chrX_data/genes/chrX.gtf -o ERR188257_chrX.gtf -l ERR188257 ERR188257_chrX.bam
+stringtie -p 2 -G chrX_data/genes/chrX.gtf -o ERR188273_chrX.gtf -l ERR188273 ERR188273_chrX.bam
+stringtie -p 2 -G chrX_data/genes/chrX.gtf -o ERR188337_chrX.gtf -l ERR188337 ERR188337_chrX.bam
+stringtie -p 2 -G chrX_data/genes/chrX.gtf -o ERR188383_chrX.gtf -l ERR188383 ERR188383_chrX.bam
+stringtie -p 2 -G chrX_data/genes/chrX.gtf -o ERR188401_chrX.gtf -l ERR188401 ERR188401_chrX.bam
+stringtie -p 2 -G chrX_data/genes/chrX.gtf -o ERR188428_chrX.gtf -l ERR188428 ERR188428_chrX.bam
+stringtie -p 2 -G chrX_data/genes/chrX.gtf -o ERR188454_chrX.gtf -l ERR188454 ERR188454_chrX.bam
+stringtie -p 2 -G chrX_data/genes/chrX.gtf -o ERR204916_chrX.gtf -l ERR204916 ERR204916_chrX.bam
+```
+
+On the example dataset, stringtie takes about 10s for each samples. It outputs new _gtf_ files containing the coordinates of the rebuilt transcripts. All the _StringTie_ results need to be merged into one unique transcript coordinate file. For this a list of the atomic _gtf_ files need to be built first.
+
+```{sh stringtiemergelist, eval=FALSE}
+ls ERR*chrX.gtf > merge_list.txt
+```
+
+Now the files can be merged.
+
+```{sh stringtiemerge, eval=FALSE}
+stringtie --merge -p 2 -G chrX_data/genes/chrX.gtf -o stringtie_merged.gtf merge_list.txt
+```
+
+This will generate an unique _gtf_ file called _stringtie\_merged.gtf_. Some extra information can be obtained using the _gffcompare_ command fromt the _gffutilities_ package. This step is optional.
+
+```{sh gffcompare, eval=FALSE}
+gffcompare -r chrX_data/genes/chrX.gtf -G -o merged stringtie_merged.gtf
+```
+
+This will create few new files:
+
+* merged.stats: containing information about the new/missed introns, exons and loci
+* merged.annotated.gtf: a _gtf_ files with information about each transcript provided in the field _class\_code_. The _class\_codes_ are provided in [table 1](#table1).
+* merged.loci
+* merged.stringtie_merged.gtf.refmap
+* merged.stringtie_merged.gtf.tmap
+* merged.tracking
+
+**Table 1**<a name="table1"/>
+
+|Code        | Description                                                                                                                                  |
+|------------|----------------------------------------------------------------------------------------------------------------------------------------------|
+| =          | Predicted transcript has exactly the same introns as the reference transcript                                                                |
+| c          | Predicted transcript is contained within the reference transcript                                                                            |
+| j          | Predicted transcript is a potential novel isoform that shares at least one splice junction with a reference transcript                       |
+| e          | Predicted single-exon transcript overlaps a reference exon plus at least 10 bp of a reference intron, indicating a possible pre-mRNA fragment|
+| i          | Predicted transcript falls entirely within a reference intron                                                                                |
+| o          | Exon of predicted transcript overlaps a reference transcript                                                                                 |
+| p          | Predicted transcript lies within 2 kb of a reference transcript (possible polymerase run-on fragment)                                        |
+| r          | Predicted transcript has >50% of its bases overlapping a soft-masked (repetitive) reference sequence                                         |
+| u          | Predicted transcript is intergenic in comparison with known reference transcripts                                                            |
+| x          | Exon of predicted transcript overlaps reference but lies on the opposite strand                                                              |
+| s          | Intron of predicted transcript overlaps a reference intron on the opposite strand                                                            |
+
+##Compute transcript abundances and counts tables
+
+This is also done using _StringTie_, but with different options.
+
+```{sh stringtiecount, eval=FALSE}
+stringtie -e -B -p 2 -G stringtie_merged.gtf -o ballgown/ERR188044/ERR188044_chrX.gtf ERR188044_chrX.bam
+stringtie -e -B -p 2 -G stringtie_merged.gtf -o ballgown/ERR188104/ERR188104_chrX.gtf ERR188104_chrX.bam
+stringtie -e -B -p 2 -G stringtie_merged.gtf -o ballgown/ERR188234/ERR188234_chrX.gtf ERR188234_chrX.bam
+stringtie -e -B -p 2 -G stringtie_merged.gtf -o ballgown/ERR188245/ERR188245_chrX.gtf ERR188245_chrX.bam
+stringtie -e -B -p 2 -G stringtie_merged.gtf -o ballgown/ERR188257/ERR188257_chrX.gtf ERR188257_chrX.bam
+stringtie -e -B -p 2 -G stringtie_merged.gtf -o ballgown/ERR188273/ERR188273_chrX.gtf ERR188273_chrX.bam
+stringtie -e -B -p 2 -G stringtie_merged.gtf -o ballgown/ERR188337/ERR188337_chrX.gtf ERR188337_chrX.bam
+stringtie -e -B -p 2 -G stringtie_merged.gtf -o ballgown/ERR188383/ERR188383_chrX.gtf ERR188383_chrX.bam
+stringtie -e -B -p 2 -G stringtie_merged.gtf -o ballgown/ERR188401/ERR188401_chrX.gtf ERR188401_chrX.bam
+stringtie -e -B -p 2 -G stringtie_merged.gtf -o ballgown/ERR188428/ERR188428_chrX.gtf ERR188428_chrX.bam
+stringtie -e -B -p 2 -G stringtie_merged.gtf -o ballgown/ERR188454/ERR188454_chrX.gtf ERR188454_chrX.bam
+stringtie -e -B -p 2 -G stringtie_merged.gtf -o ballgown/ERR204916/ERR204916_chrX.gtf ERR204916_chrX.bam
+```
+
+##Differentially expressed genes (DEG) computation
+
+The DEG computation is done using _ballgown_. The installation of _ballgown_ can be done through _bioconductor_. The following commands are R commands that need to be launched in a R console (or in RStudio), unless specified otherwise.
+
+```{R ballgownbc, eval=FALSE}
+source("https://bioconductor.org/biocLite.R")
+biocLite("ballgown")
+```
+
+It is also recommended to install the following libraries:
+* _RSkittleBrewer_
+* _genefilter_
+* _dplyr_
+* _devtools_
+
+```{R ballgownlibs, eval=FALSE}
+install.packages(c("dplyr","devtools"))
+devtools::install_github('alyssafrazee/RSkittleBrewer')
+
+#source("https://bioconductor.org/biocLite.R")
+biocLite("genefilter")
+```
+
+```{R, echo=FALSE}
+library(ballgown)
+library(RSkittleBrewer) 
+library(genefilter)
+library(dplyr)
+library(devtools)
+```
+
+
+On Ubuntu 16.04, the following libraries are mandatory to install _devtools_: 
+
+```{sh ubuntulibs, eval=FALSE}
+# In a terminal
+sudo apt install build-essential libcurl4-gnutls-dev libxml2-dev libssl-dev
+```
+
+The phenotype data  (aka the samples information) need first to be loaded.
+
+```{R phenodata, echo=TRUE}
+#setwd("RNAseq_protocol")
+pheno_data <- read.csv("chrX_data/geuvadis_phenodata.csv")
+```
+
+Here is the content of the table:
+
+```{r t2, echo=FALSE}
+knitr::kable(pheno_data)
+```
+
+###FPKM
+To compute the FPKM, use the _ballgown_ command.
+
+```{r BG, message=FALSE, cache=TRUE}
+bg_chrX <- ballgown(dataDir = "ballgown", samplePattern = "ERR", pData=pheno_data)
+```
+
+The _dataDir_ parameter indicates to _ballgown_ where is the directory containing the previously processed data. The parameter _samplePattern_ indicates that the sample names start by "ERR". Finally the parameter _pData_ correspond to the dataframe containing the sample information. The structure of the _ballgown_ object is explained [here](https://github.com/alyssafrazee/ballgown#accessing-assembly-data). The expression values can be accessed using:
+
+```{r BGexpr}
+bg_chrX.expr <- expr(bg_chrX)
+knitr::kable(bg_chrX.expr$trans[bg_chrX.expr$trans$gene_id == "MSTRG.1",]) # expression values for all the transcripts from gene "MSTRG.1"
+```
+
+The genes with a low read counts have to be discarded. It is also possible to apply a low variance filter. Here, we remove all the transcripts having a variance lower than 1.
+
+```{r BGfilter, cache=TRUE}
+bg_chrX_filt <- subset(bg_chrX, "rowVars(texpr(bg_chrX)) >1", genomesubset=TRUE)
+```
+
+###Differentially expressed transcripts
+
+```{r DET, cache=TRUE}
+results_transcripts <- stattest(bg_chrX_filt, feature="transcript", covariate="sex", adjustvars = c("population"), getFC=TRUE, meas="FPKM")
+```
+
+Here are the first five rows of the returned object.
+
+```{r t3, echo=FALSE}
+knitr::kable(results_transcripts[1:5,])
+```
+
+Here,  we will look for transcripts that are differentially expressed between sexes, while correcting for any differences in expression due to the population variable. _getFC_ is set to TRUE so the Fold Change is also returned. It might not be correct to use this _stattest_ method on small replicate numbers, and we may need to go to DESeq.
+
+###Differentially expressed genes
+
+It is the same process as for the transcripts, only the feature type has to change.
+
+```{R DEG, cache=TRUE}
+results_genes <- stattest(bg_chrX_filt, feature="gene", covariate="sex", adjustvars = c("population"), getFC=TRUE, meas="FPKM")
+```
+
+Here are the first five rows of the returned object.
+
+```{r t4, echo=FALSE}
+knitr::kable(results_genes[1:5,])
+```
+
+###Data post processing
+
+First, we need to add the gene informations to the transcript_results dataframe
+
+```{r}
+results_transcripts <- data.frame(geneNames=ballgown::geneNames(bg_chrX_filt), geneIDs=ballgown::geneIDs(bg_chrX_filt), results_transcripts)
+```
+
+Here are the first five rows of the returned object.
+
+```{r t5, echo=FALSE}
+knitr::kable(results_transcripts[1:5,])
+```
+
+Then the data has to be sorted by increasing P-Value.
+
+```{r}
+results_transcripts <- arrange(results_transcripts,pval)
+results_genes <- arrange(results_genes,pval)
+```
+
+Here are the first five rows of the genes results.
+
+```{r t6, echo=FALSE}
+knitr::kable(results_genes[1:5,])
+```
+
+The log fold change (logFC) can be computed.
+
+```{r}
+results_transcripts$logFC <- log2(results_transcripts$fc)
+results_genes$logFC <- log2(results_genes$fc)
+```
+
+Here are the first five rows of the genes results.
+
+```{r t7, echo=FALSE}
+knitr::kable(results_genes[1:5,])
+```
+
+Finally, in order to keep only the statitically significant genes, it is possible to filter the data using a Q-Value threshold of 0.05.
+
+```{r qvaluefilter, message=FALSE, eval=FALSE}
+subset(results_transcripts,results_transcripts$qval<0.05)
+subset(results_genes,results_genes$qval<0.05)
+```
+
+##Visualisation
+
+###Volcano plot
+
+```{R}
+volcano_plot <- function(data){
+  logfc.threshold <- 1
+  with(data, plot(logFC, -log10(qval), pch=20, main="Volcano plot"))
+  with(subset(data, qval<.05 ), points(logFC, -log10(qval), pch=20, col="red"))
+  with(subset(data, abs(logFC)>logfc.threshold), points(logFC, -log10(qval), pch=20, col="orange"))
+  with(subset(data, qval<.05 & abs(logFC)>logfc.threshold), points(logFC, -log10(qval), pch=20, col="green"))
+}
+
+volcano_plot(results_genes)
+```
+
+###Distribution
+
+```{R}
+tropical= c('darkorange', 'dodgerblue', 'hotpink', 'limegreen', 'yellow')
+palette(tropical)
+fpkm = texpr(bg_chrX_filt,meas="FPKM")
+fpkm = log2(fpkm+1)
+par(mar = c(10,5,4,2) + 0.1)
+boxplot(fpkm,col=as.numeric(pheno_data$sex),las=2,ylab='log2(FPKM+1)')
+```
+This bar plot shows the distribution of the FPKM colored the "sex" variable.
+
+###Data variation for one gene
+
+```{R, message=FALSE}
+plot(fpkm[12,] ~ pheno_data$sex, border=c(1,2), main=paste(ballgown::geneNames(bg_chrX)[12],' : ', ballgown::transcriptNames(bg_chrX)[12]),pch=19, xlab="Sex", ylab='log2(FPKM+1)')
+points(fpkm[12,] ~ jitter(as.numeric(pheno_data$sex)), col=as.numeric(pheno_data$sex))
+```
+
+###Plot transcripts
+
+```{R}
+plotTranscripts(ballgown::geneIDs(bg_chrX)[ballgown::geneNames(bg_chrX) == "XIST"], bg_chrX, main=c('Gene XIST in sample ERR188234'), sample=c('ERR188234'))
+```
+
+###Heatmap
+
+```{R}
+library(RColorBrewer)
+library(gplots)
+my_palette <- colorRampPalette(c("green", "yellow", "red"))(n = 299)
+mat_data <- data.matrix(fpkm)
+heatmap.2(mat_data,
+  main = "FPKM",
+  notecol="black",
+  # density.info="none",
+  trace="none",
+  margins =c(12,9),
+  col=my_palette,
+  # breaks=col_breaks,
+  dendrogram="both")
+```
+
+##Export
+
+###Gene expression - FPMK
+
+```{R, message=FALSE}
+gene_expression <- gexpr(bg_chrX)
+```
+
+```{R, echo=FALSE}
+knitr::kable(gene_expression[1:5,])
+```
+
+Export to CSV
+
+```{R, message=FALSE}
+write.csv(gene_expression, "chrX_gene_expression_results.csv", row.names=FALSE)
+```
+
+Export all infos in one spreadsheet
+
+```{R, message=FALSE}
+write.csv(merge(results_genes, gene_expression, by=0, all=T), "chrX_all_results.csv", row.names=TRUE)
+```
+
+###Transcript and genes folds export
+
+```{R}
+write.csv(results_transcripts, "chrX_transcript_results.csv", row.names=FALSE)
+write.csv(results_genes, "chrX_gene_results.csv", row.names=FALSE) 
+```
+
+##Comparison with DESeq2
+
+###DEG computation
+
+The _StringTie_ output needs to be converted. It can be done using a python script.
+
+```{sh, eval=FALSE}
+#This is a shell command
+prepDE.py -i ballgown -g stringtie_to_DESeq.genes.csv -t stringtie_to_DESeq.trans.csv -p ERR
+```
+
+Then the data can be loaded in DESeq2
+
+```{R, message=FALSE}
+library(DESeq2)
+counts <- read.csv("stringtie_to_DESeq.genes.csv", row.names = 1)
+
+sex <- as.factor(pheno_data$sex)
+pop <- as.factor(pheno_data$population)
+ids <- as.vector(pheno_data$ids)
+
+coldata <- data.frame(row.names=ids, pop=pop, sex=sex)
+
+bg_chrX.deseq <- DESeqDataSetFromMatrix(counts, coldata, design=~ sex + pop)
+```
+
+The design parameter indicates that there is two variables: _sex_ and _pop_. The DEG computation is done using the _DEseq_ function.
+
+```{R, message=FALSE}
+deseq <- DESeq(bg_chrX.deseq)
+deseq.results <- results(deseq)
+deseq.results<-deseq.results[order(deseq.results$padj),]
+```
+
+As the model varies a lot from _BallGown_. The results are very different. With a small number of replicates (<4?) it is usually advised to use a non-linear model method like DESeq2. 
+
+###Volcano plot
+
+```{R, message=FALSE}
+deseq.volcano_plot <- function(data){
+  logfc.threshold <- 1
+  with(data, plot(log2FoldChange, -log10(padj), pch=20, main="Volcano plot"))
+  with(subset(data, padj<.05 ), points(log2FoldChange, -log10(padj), pch=20, col="red"))
+  with(subset(data, abs(log2FoldChange)>logfc.threshold), points(log2FoldChange, -log10(padj), pch=20, col="orange"))
+  with(subset(data, padj<.05 & abs(log2FoldChange)>logfc.threshold), points(log2FoldChange, -log10(padj), pch=20, col="green"))
+}
+
+deseq.volcano_plot(deseq.results)
+```
+
+It is finally possible to include a shrink correction on the log fold change. In this case, this removes all significant results.
+
+```{R, message=FALSE}
+deseq.results.lfcshrink <- lfcShrink(deseq, coef=2, res=deseq.results)
+deseq.volcano_plot(deseq.results.lfcshrink)
+```
+
+###Venn diagrams comparing both methods
+
+```{R}
+library("VennDiagram")
+dev.off()
+logfc.threshold <- 2
+BG.genes <- as.vector(subset(results_genes, qval<=.05 & abs(logFC) >= logfc.threshold )$id)
+DEseq2.genes <- row.names(subset(deseq.results, padj<=.05 & abs(log2FoldChange) >= logfc.threshold))
+venn.list <- list(BG.genes, DEseq2.genes)
+venn.plot <- venn.diagram(venn.list, 
+                          "VennDiagram.png", 
+                          imagetype = 'png',
+                          height = 800, 
+                          width = 800,
+                          resolution = 100,
+                          fill=c("darkmagenta", "darkblue"), 
+                          alpha=c(0.5,0.5), 
+                          cex = 4, 
+                          cat.fontface=0.1, 
+                          category.names=c("BG", "DS2"), 
+                          main="Differentially expressed genes")
+```
+
+This creates a _VennDiagram.png_ file:
+
+![](RNAseq_protocol/VennDiagram.png "Venn diagram")
