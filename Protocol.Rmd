@@ -169,7 +169,7 @@ stringtie -e -B -p 2 -G stringtie_merged.gtf -o ballgown/ERR204916/ERR204916_chr
 
 The DEG computation is done using _ballgown_. The installation of _ballgown_ can be done through _bioconductor_. The following commands are R commands that need to be launched in a R console (or in RStudio), unless specified otherwise.
 
-```{R ballgownbc, eval=FALSE}
+```{R ballgownbc, eval=FALSE, message=FALSE}
 source("https://bioconductor.org/biocLite.R")
 biocLite("ballgown")
 ```
@@ -188,7 +188,9 @@ devtools::install_github('alyssafrazee/RSkittleBrewer')
 biocLite("genefilter")
 ```
 
-```{R, echo=FALSE}
+The libraries to load are:
+
+```{R, message=FALSE}
 library(ballgown)
 library(RSkittleBrewer) 
 library(genefilter)
