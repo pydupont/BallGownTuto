@@ -487,3 +487,66 @@ venn.plot <- venn.diagram(venn.list,
 This creates a _VennDiagram.png_ file:
 
 ![](RNAseq_protocol/VennDiagram.png "Venn diagram")
+
+##DEGSeq
+
+```{R, message=FALSE}
+library("DEGseq")
+getwd()
+file <- file.path(getwd(), "stringtie_to_DESeq.genes.csv")
+male.indexes <- as.vector(as.integer(row.names(subset(pheno_data, sex=="male")))+1)
+female.indexes <- as.vector(as.integer(row.names(subset(pheno_data, sex=="female")))+1)
+deg.geneexp.male <- readGeneExp(file=file, geneCol=1, valCol=male.indexes, header=T, sep=",")
+deg.geneexp.female <- readGeneExp(file=file, geneCol=1, valCol=female.indexes, header=T, sep=",")
+DEGexp(geneExpMatrix1 = deg.geneexp.male, 
+       geneExpMatrix2 = deg.geneexp.female,
+       geneCol1 = 1,
+       expCol1 = c(2,3,4,5,6,7),
+       geneCol2 = 1,
+       expCol2 = c(2,3,4,5,6,7),
+       groupLabel1 = "Male",
+       groupLabel2 = "Female",
+       method = "LRT",
+       outputDir = "DEGseqResults")
+degseq.result<-read.table(file=file.path("DEGseqResults","output_score.txt"),header = T,sep = "\t")
+degseq.result$Signature2 <- (degseq.result$q.value.Storey.et.al..2003. <= 0.05  & abs(degseq.result$log2.Fold_change.) >= 2)
+length(which(degseq.result$Signature2=="TRUE"))
+```
+
+###Volcano plot:
+```{R}
+degseq.volcano_plot <- function(data){
+  logfc.threshold <- 1
+  with(data, plot(log2.Fold_change., -log10(q.value.Storey.et.al..2003.), pch=20, main="Volcano plot"))
+  with(subset(data, q.value.Storey.et.al..2003.<.05 ), points(log2.Fold_change., -log10(q.value.Storey.et.al..2003.), pch=20, col="red"))
+  with(subset(data, abs(log2.Fold_change.)>logfc.threshold), points(log2.Fold_change., -log10(q.value.Storey.et.al..2003.), pch=20, col="orange"))
+  with(subset(data, q.value.Storey.et.al..2003.<.05 & abs(log2.Fold_change.)>logfc.threshold), points(log2.Fold_change., -log10(q.value.Storey.et.al..2003.), pch=20, col="green"))
+}
+
+degseq.volcano_plot(degseq.result)
+```
+
+###Venn diagram
+
+```{R}
+DEGseq.genes <- as.vector(subset(degseq.result, q.value.Storey.et.al..2003.<=.05 & abs(log2.Fold_change.) >= logfc.threshold )$GeneNames)
+venn.list <- list(BG.genes, DEseq2.genes, DEGseq.genes)
+venn.plot <- venn.diagram(venn.list, 
+                          "VennDiagram3.png", 
+                          imagetype = 'png',
+                          height = 800, 
+                          width = 800,
+                          resolution = 100,
+                          fill=c("darkmagenta", "darkblue", "darkgreen"), 
+                          alpha=c(0.5,0.5,0.5), 
+                          cex = 4, 
+                          cat.fontface=0.1, 
+                          category.names=c("BG", "DS2", "DEGseq"), 
+                          main="Differentially expressed genes")
+```
+
+This creates a _VennDiagram3.png_ file:
+
+![](RNAseq_protocol/VennDiagram3.png "Venn diagram")
+
+It is very surprising that the three methods don't overlap at all.
