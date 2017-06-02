@@ -230,7 +230,7 @@ The _dataDir_ parameter indicates to _ballgown_ where is the directory containin
 
 ```{r BGexpr}
 bg_chrX.expr <- expr(bg_chrX)
-knitr::kable(bg_chrX.expr$trans[bg_chrX.expr$trans$gene_id == "MSTRG.1",]) # expression values for all the transcripts from gene "MSTRG.1"
+knitr::kable(bg_chrX.expr$trans[bg_chrX.expr$trans$gene_id == "MSTRG.1",1:12]) # expression values for all the transcripts from gene "MSTRG.1"
 ```
 
 The genes with a low read counts have to be discarded. It is also possible to apply a low variance filter. Here, we remove all the transcripts having a variance lower than 1.
@@ -357,7 +357,7 @@ plotTranscripts(ballgown::geneIDs(bg_chrX)[ballgown::geneNames(bg_chrX) == "XIST
 
 ###Heatmap
 
-```{R}
+```{R, message=FALSE}
 library(RColorBrewer)
 library(gplots)
 my_palette <- colorRampPalette(c("green", "yellow", "red"))(n = 299)
@@ -382,7 +382,7 @@ gene_expression <- gexpr(bg_chrX)
 ```
 
 ```{R, echo=FALSE}
-knitr::kable(gene_expression[1:5,])
+knitr::kable(gene_expression[1:5,1:5])
 ```
 
 Export to CSV
@@ -463,9 +463,9 @@ deseq.volcano_plot(deseq.results.lfcshrink)
 
 ###Venn diagrams comparing both methods
 
-```{R}
+```{R, message=FALSE}
 library("VennDiagram")
-dev.off()
+# dev.off()
 logfc.threshold <- 2
 BG.genes <- as.vector(subset(results_genes, qval<=.05 & abs(logFC) >= logfc.threshold )$id)
 DEseq2.genes <- row.names(subset(deseq.results, padj<=.05 & abs(log2FoldChange) >= logfc.threshold))
@@ -490,9 +490,9 @@ This creates a _VennDiagram.png_ file:
 
 ##DEGSeq
 
-```{R, message=FALSE}
+```{R, message=FALSE, warning=FALSE, error=FALSE, results="hide", cache=TRUE}
 library("DEGseq")
-getwd()
+
 file <- file.path(getwd(), "stringtie_to_DESeq.genes.csv")
 male.indexes <- as.vector(as.integer(row.names(subset(pheno_data, sex=="male")))+1)
 female.indexes <- as.vector(as.integer(row.names(subset(pheno_data, sex=="female")))+1)
@@ -508,13 +508,16 @@ DEGexp(geneExpMatrix1 = deg.geneexp.male,
        groupLabel2 = "Female",
        method = "LRT",
        outputDir = "DEGseqResults")
+```
+
+```{R, message=FALSE, warning=FALSE, results="hide"}
 degseq.result<-read.table(file=file.path("DEGseqResults","output_score.txt"),header = T,sep = "\t")
 degseq.result$Signature2 <- (degseq.result$q.value.Storey.et.al..2003. <= 0.05  & abs(degseq.result$log2.Fold_change.) >= 2)
 length(which(degseq.result$Signature2=="TRUE"))
 ```
 
 ###Volcano plot:
-```{R}
+```{R, warning=FALSE}
 degseq.volcano_plot <- function(data){
   logfc.threshold <- 1
   with(data, plot(log2.Fold_change., -log10(q.value.Storey.et.al..2003.), pch=20, main="Volcano plot"))
@@ -528,7 +531,7 @@ degseq.volcano_plot(degseq.result)
 
 ###Venn diagram
 
-```{R}
+```{R, warning=FALSE}
 DEGseq.genes <- as.vector(subset(degseq.result, q.value.Storey.et.al..2003.<=.05 & abs(log2.Fold_change.) >= logfc.threshold )$GeneNames)
 venn.list <- list(BG.genes, DEseq2.genes, DEGseq.genes)
 venn.plot <- venn.diagram(venn.list, 
@@ -549,4 +552,30 @@ This creates a _VennDiagram3.png_ file:
 
 ![](RNAseq_protocol/VennDiagram3.png "Venn diagram")
 
-It is very surprising that the three methods don't overlap at all.
+It is very surprising that the three methods don't overlap at all. I suspect that it is due to the low fold ratios and the low number of significant pvalues. Here is a plot showing the comparison between the fold ratios computed by _DESeq2_ and _BallGown_ (log10 scale).
+
+```{R, message=FALSE, warning=FALSE}
+library("ggplot2")
+BG.results_genes <- subset(results_genes, select=c("logFC","qval"))
+row.names(BG.results_genes) <- results_genes$id
+names(BG.results_genes) <- c("BG.log.fold.change","BG.qval")
+
+DEseq2.results_genes <- subset(as.data.frame(deseq.results), select=c("log2FoldChange","padj"))
+names(DEseq2.results_genes) <- c("DESeq2.log.fold.change","DESeq2.padj")
+
+dt <- merge(BG.results_genes, DEseq2.results_genes, by=0, all=TRUE)
+
+p <- ggplot(dt, aes(x=BG.log.fold.change, y=DESeq2.log.fold.change)) +
+  geom_point(shape=1) +
+  scale_y_log10() +
+  scale_x_log10() 
+ggExtra::ggMarginal(p, type="histogram")
+```
+
+Here is a comparison of the corrected p-values.
+
+```{R, message=FALSE, warning=FALSE}
+p1 <- ggplot(dt, aes(x=BG.qval, y=DESeq2.padj)) +
+  geom_point(shape=1)
+ggExtra::ggMarginal(p1, type="histogram")
+```
