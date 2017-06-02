@@ -554,6 +554,7 @@ This creates a _VennDiagram3.png_ file:
 
 It is very surprising that the three methods don't overlap at all. I suspect that it is due to the low fold ratios and the low number of significant pvalues. Here is a plot showing the comparison between the fold ratios computed by _DESeq2_ and _BallGown_ (log10 scale).
 
+##Final comparison
 ```{R, message=FALSE, warning=FALSE}
 library("ggplot2")
 BG.results_genes <- subset(results_genes, select=c("logFC","qval"))
